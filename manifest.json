@@ -1,0 +1,17 @@
+{
+  "name": "交易复盘",
+  "short_name": "交易复盘",
+  "start_url": "/trading-journal/",
+  "display": "standalone",
+  "theme_color": "#f6f7f9",
+  "background_color": "#f6f7f9",
+  "description": "本地优先的交易订单与情绪执行复盘工具。",
+  "icons": [
+    {
+      "src": "/trading-journal/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
