@@ -58,6 +58,11 @@ type TradeSetSummary = {
 
 type ActiveView = TabKey | "editor";
 
+type ScoreOption = {
+  value: number;
+  label: string;
+};
+
 const emptyFilters: Filters = {
   symbol: "",
   direction: "",
@@ -74,6 +79,30 @@ const emptyFilters: Filters = {
 };
 
 const weekdayLabels = ["一", "二", "三", "四", "五", "六", "日"];
+
+const emotionScoreOptions: ScoreOption[] = [
+  { value: 1, label: "冷静" },
+  { value: 2, label: "稳定" },
+  { value: 3, label: "有波动" },
+  { value: 4, label: "上头/焦虑" },
+  { value: 5, label: "失控/报复冲动" },
+];
+
+const biasScoreOptions: ScoreOption[] = [
+  { value: 1, label: "无偏执" },
+  { value: 2, label: "轻微执念" },
+  { value: 3, label: "明显不甘心" },
+  { value: 4, label: "强烈证明欲" },
+  { value: 5, label: "失控报复" },
+];
+
+const executionScoreOptions: ScoreOption[] = [
+  { value: 1, label: "严重偏离" },
+  { value: 2, label: "执行较差" },
+  { value: 3, label: "基本执行" },
+  { value: 4, label: "执行良好" },
+  { value: 5, label: "完全按计划" },
+];
 
 function pad2(value: number): string {
   return String(value).padStart(2, "0");
@@ -105,6 +134,10 @@ function formatMonthTitle(monthValue: string): string {
 function formatAmount(value: number): string {
   const rounded = roundNumber(value);
   return `${rounded > 0 ? "+" : ""}${rounded.toFixed(2)}`;
+}
+
+function scoreLabel(options: ScoreOption[], value: number): string {
+  return options.find((option) => option.value === value)?.label ?? "未记录";
 }
 
 function toLocalInputValue(date = new Date()): string {
@@ -444,7 +477,7 @@ function CalendarView({
         <Metric label="平均 R" value={formatR(monthSummary.avgR)} tone={valueTone(monthSummary.avgR)} />
         <Metric label="实际盈亏" value={monthSummary.hasPnl ? formatAmount(monthSummary.pnlTotal) : "未填写"} tone={valueTone(monthSummary.pnlTotal)} />
         <Metric label="系统外" value={`${monthSummary.outSystemCount} 笔`} tone={monthSummary.outSystemCount ? "negative" : "neutral"} />
-        <Metric label="情绪 ≥ 4" value={`${monthSummary.highEmotionCount} 笔`} tone={monthSummary.highEmotionCount ? "negative" : "neutral"} />
+        <Metric label="高情绪" value={`${monthSummary.highEmotionCount} 笔`} tone={monthSummary.highEmotionCount ? "negative" : "neutral"} />
       </section>
 
       <section className="panel calendar-panel">
@@ -567,7 +600,7 @@ function CalendarView({
                   <span>{trade.strategy || "未填策略"}</span>
                   <span>{trade.inSystem ? "系统内" : "系统外"}</span>
                   <span>{trade.result}</span>
-                  <span>情绪 {trade.emotionScore}</span>
+                  <span>情绪 {scoreLabel(emotionScoreOptions, trade.emotionScore)}</span>
                 </div>
                 <p>{trade.summary || "暂无一句话复盘"}</p>
                 <div className="card-actions card-actions--compact">
@@ -614,7 +647,7 @@ function StatsView({
         <Metric label="最大单笔亏损" value={formatR(stats.maxLossR)} tone={valueTone(stats.maxLossR)} />
         <Metric label="系统内总 R" value={formatR(stats.inSystemR)} tone={valueTone(stats.inSystemR)} />
         <Metric label="系统外总 R" value={formatR(stats.outSystemR)} tone={valueTone(stats.outSystemR)} />
-        <Metric label="情绪 ≥ 4 总 R" value={formatR(stats.highEmotionR)} tone={valueTone(stats.highEmotionR)} />
+        <Metric label="高情绪总 R" value={formatR(stats.highEmotionR)} tone={valueTone(stats.highEmotionR)} />
         <Metric label="今日" value={`${stats.todayTrades} 笔`} />
         <Metric label="本周" value={`${stats.weekTrades} 笔`} />
         <Metric label="本月" value={`${stats.monthTrades} 笔`} />
@@ -847,9 +880,9 @@ function TradesView({
             情绪最低
             <select value={filters.emotionMin} onChange={(event) => setFilter("emotionMin", event.target.value)}>
               <option value="">不限</option>
-              {[1, 2, 3, 4, 5].map((score) => (
-                <option key={score} value={score}>
-                  {score}
+              {emotionScoreOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
                 </option>
               ))}
             </select>
@@ -858,9 +891,9 @@ function TradesView({
             情绪最高
             <select value={filters.emotionMax} onChange={(event) => setFilter("emotionMax", event.target.value)}>
               <option value="">不限</option>
-              {[1, 2, 3, 4, 5].map((score) => (
-                <option key={score} value={score}>
-                  {score}
+              {emotionScoreOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
                 </option>
               ))}
             </select>
@@ -900,7 +933,7 @@ function TradesView({
                 <span>{trade.strategy || "未填策略"}</span>
                 <span>{trade.inSystem ? "系统内" : "系统外"}</span>
                 <span>{trade.result}</span>
-                <span>情绪 {trade.emotionScore}</span>
+                <span>情绪 {scoreLabel(emotionScoreOptions, trade.emotionScore)}</span>
                 <span>{trade.biasType}</span>
               </div>
               <p>{trade.summary || "暂无一句话复盘"}</p>
@@ -963,16 +996,9 @@ function TradeEditor({
   onSave: (trade: Trade) => Promise<void>;
 }) {
   const [draft, setDraft] = useState<Trade>(initialTrade ?? createEmptyTrade());
-  const [manualR, setManualR] = useState(Boolean(initialTrade));
   const [imageRole, setImageRole] = useState<ImageRole>("进场前");
   const [isSaving, setIsSaving] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
-  const autoR = calculateR(draft);
-
-  useEffect(() => {
-    if (manualR || autoR === null || autoR === draft.rMultiple) return;
-    setDraft((current) => ({ ...current, rMultiple: autoR }));
-  }, [autoR, draft.rMultiple, manualR]);
 
   function update<K extends keyof Trade>(key: K, value: Trade[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -994,8 +1020,9 @@ function TradeEditor({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    const rMultiple = calculateR(draft) ?? draft.rMultiple ?? 0;
     setIsSaving(true);
-    await onSave({ ...draft, rMultiple: Number(draft.rMultiple || 0), updatedAt: new Date().toISOString() });
+    await onSave({ ...draft, rMultiple, updatedAt: new Date().toISOString() });
     setIsSaving(false);
   }
 
@@ -1004,7 +1031,6 @@ function TradeEditor({
       <section className="panel">
         <div className="list-head">
           <SectionTitle eyebrow="Record" title={initialTrade ? "编辑交易" : "新增交易"} />
-          <button className="ghost-action" type="button" onClick={onCancel}>返回</button>
         </div>
 
         <div className="form-grid">
@@ -1063,33 +1089,15 @@ function TradeEditor({
             <input value={draft.size ?? ""} onChange={(event) => update("size", event.target.value)} placeholder="例如 0.1 手" />
           </label>
           <NumberField label="实际盈亏金额" value={draft.pnl} onChange={(value) => updateNumber("pnl", value)} />
-          <label>
-            R 倍数
-            <input
-              required
-              type="number"
-              step="0.01"
-              value={draft.rMultiple}
-              onChange={(event) => {
-                setManualR(true);
-                update("rMultiple", Number(event.target.value));
-              }}
-            />
-          </label>
-          <label className="checkbox-line">
-            <input type="checkbox" checked={manualR} onChange={(event) => setManualR(event.target.checked)} />
-            手动填写 R
-          </label>
         </div>
-        <p className="hint">自动 R：{autoR === null ? "填入入场、止损、出场后计算" : formatR(autoR)}</p>
       </section>
 
       <section className="panel">
         <SectionTitle eyebrow="Mind" title="情绪与执行" />
         <div className="form-grid">
-          <ScoreField label="情绪评分" value={draft.emotionScore} onChange={(value) => update("emotionScore", value)} />
-          <ScoreField label="偏执评分" value={draft.biasScore} onChange={(value) => update("biasScore", value)} />
-          <ScoreField label="执行评分" value={draft.executionScore} onChange={(value) => update("executionScore", value)} />
+          <ScoreField label="情绪状态" options={emotionScoreOptions} value={draft.emotionScore} onChange={(value) => update("emotionScore", value)} />
+          <ScoreField label="偏执状态" options={biasScoreOptions} value={draft.biasScore} onChange={(value) => update("biasScore", value)} />
+          <ScoreField label="执行状态" options={executionScoreOptions} value={draft.executionScore} onChange={(value) => update("executionScore", value)} />
           <label>
             偏执/错误类型
             <select value={draft.biasType} onChange={(event) => update("biasType", event.target.value)}>
@@ -1178,12 +1186,22 @@ function NumberField({ label, value, onChange }: { label: string; value?: number
   );
 }
 
-function ScoreField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+function ScoreField({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: ScoreOption[];
+  value: number;
+  onChange: (value: number) => void;
+}) {
   return (
     <label>
       {label}
       <select value={value} onChange={(event) => onChange(Number(event.target.value))}>
-        {[1, 2, 3, 4, 5].map((score) => <option key={score} value={score}>{score}</option>)}
+        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
     </label>
   );
@@ -1304,9 +1322,9 @@ function TradeDetailModal({
           <Detail label="策略" value={trade.strategy || "未填写"} />
           <Detail label="系统" value={trade.inSystem ? "系统内" : "系统外"} />
           <Detail label="结果" value={trade.result} />
-          <Detail label="情绪" value={`${trade.emotionScore} / 5`} />
-          <Detail label="偏执" value={`${trade.biasScore} / 5 · ${trade.biasType}`} />
-          <Detail label="执行" value={`${trade.executionScore} / 5`} />
+          <Detail label="情绪" value={scoreLabel(emotionScoreOptions, trade.emotionScore)} />
+          <Detail label="偏执" value={`${scoreLabel(biasScoreOptions, trade.biasScore)} · ${trade.biasType || "无"}`} />
+          <Detail label="执行" value={scoreLabel(executionScoreOptions, trade.executionScore)} />
         </div>
 
         <div className="note-block"><strong>一句话复盘</strong><p>{trade.summary || "未填写"}</p></div>
