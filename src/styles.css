@@ -110,6 +110,10 @@ th {
   padding: 18px 16px calc(92px + env(safe-area-inset-bottom));
 }
 
+.app-shell--editor {
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+}
+
 .app-header {
   display: flex;
   align-items: center;
@@ -689,6 +693,10 @@ th {
   backdrop-filter: blur(18px);
 }
 
+.app-shell--editor .sticky-submit {
+  bottom: calc(12px + env(safe-area-inset-bottom));
+}
+
 .sticky-submit button {
   flex: 1;
 }
@@ -781,9 +789,9 @@ th {
   left: 0;
   z-index: 20;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 6px;
-  width: min(780px, calc(100% - 18px));
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  width: min(720px, calc(100% - 18px));
   margin: 0 auto;
   padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
   border: 1px solid rgba(229, 231, 235, 0.9);

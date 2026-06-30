@@ -56,6 +56,8 @@ type TradeSetSummary = {
   highEmotionCount: number;
 };
 
+type ActiveView = TabKey | "editor";
+
 const emptyFilters: Filters = {
   symbol: "",
   direction: "",
@@ -220,7 +222,8 @@ function buildCalendarDays(monthValue: string, trades: Trade[]): CalendarDaySumm
 function App() {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [backupMeta, setBackupMeta] = useState<BackupMeta>({});
-  const [tab, setTab] = useState<TabKey>("stats");
+  const [tab, setTab] = useState<ActiveView>("stats");
+  const [returnTab, setReturnTab] = useState<TabKey>("trades");
   const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
   const [editorKey, setEditorKey] = useState(0);
   const [viewTrade, setViewTrade] = useState<Trade | null>(null);
@@ -244,12 +247,14 @@ function App() {
   }, [toast]);
 
   function openNewTrade() {
+    setReturnTab(tab === "editor" ? returnTab : tab);
     setEditingTrade(null);
     setEditorKey((key) => key + 1);
     setTab("editor");
   }
 
   function openEditTrade(trade: Trade) {
+    setReturnTab(tab === "editor" ? returnTab : tab);
     setEditingTrade(trade);
     setEditorKey((key) => key + 1);
     setTab("editor");
@@ -257,6 +262,7 @@ function App() {
 
   function copyTrade(trade: Trade) {
     const now = new Date().toISOString();
+    setReturnTab(tab === "editor" ? returnTab : tab);
     setEditingTrade({
       ...trade,
       id: createId(),
@@ -273,7 +279,7 @@ function App() {
     await saveTrade({ ...trade, updatedAt: new Date().toISOString() });
     await reload();
     setToast("交易已保存");
-    setTab("trades");
+    setTab(returnTab);
   }
 
   async function handleDelete(trade: Trade) {
@@ -319,15 +325,17 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={tab === "editor" ? "app-shell app-shell--editor" : "app-shell"}>
       <header className="app-header">
         <div>
           <p className="eyebrow">Local First</p>
           <h1>交易复盘</h1>
         </div>
-        <button className="primary-action" type="button" onClick={openNewTrade}>
-          + 记录
-        </button>
+        {tab !== "editor" && (
+          <button className="primary-action" type="button" onClick={openNewTrade}>
+            + 记录
+          </button>
+        )}
       </header>
 
       <main>
@@ -346,7 +354,7 @@ function App() {
           />
         )}
         {tab === "editor" && (
-          <TradeEditor key={editorKey} initialTrade={editingTrade} onCancel={() => setTab("trades")} onSave={handleSave} />
+          <TradeEditor key={editorKey} initialTrade={editingTrade} onCancel={() => setTab(returnTab)} onSave={handleSave} />
         )}
         {tab === "backup" && (
           <BackupView
@@ -359,13 +367,14 @@ function App() {
         )}
       </main>
 
-      <nav className="tabbar" aria-label="主导航">
-        <TabButton active={tab === "stats"} label="统计" onClick={() => setTab("stats")} />
-        <TabButton active={tab === "calendar"} label="日历" onClick={() => setTab("calendar")} />
-        <TabButton active={tab === "trades"} label="订单" onClick={() => setTab("trades")} />
-        <TabButton active={tab === "editor"} label="记录" onClick={openNewTrade} />
-        <TabButton active={tab === "backup"} label="备份" onClick={() => setTab("backup")} />
-      </nav>
+      {tab !== "editor" && (
+        <nav className="tabbar" aria-label="主导航">
+          <TabButton active={tab === "stats"} label="统计" onClick={() => setTab("stats")} />
+          <TabButton active={tab === "calendar"} label="日历" onClick={() => setTab("calendar")} />
+          <TabButton active={tab === "trades"} label="订单" onClick={() => setTab("trades")} />
+          <TabButton active={tab === "backup"} label="备份" onClick={() => setTab("backup")} />
+        </nav>
+      )}
 
       {viewTrade && (
         <TradeDetailModal
