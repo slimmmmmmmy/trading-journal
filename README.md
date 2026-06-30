@@ -10,7 +10,24 @@
 - 日历看板按月查看每天交易笔数、总 R、实际盈亏和风险信号
 - 完整 JSON、轻量 JSON、CSV、Markdown 导出和 JSON 导入
 
-## 本地运行
+## Mac 桌面版
+
+开发运行：
+
+```bash
+npm install
+npm run dev:mac
+```
+
+打包 Mac App：
+
+```bash
+npm run build:mac
+```
+
+打包产物输出到 `release/`。应用数据保存在 macOS 的应用数据目录中，不上传服务器。
+
+## Web 本地运行
 
 ```bash
 npm install
