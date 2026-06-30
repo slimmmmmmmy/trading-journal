@@ -339,9 +339,9 @@ function App() {
       </header>
 
       <main>
-        {tab === "stats" && <StatsView stats={stats} trades={trades} backupMeta={backupMeta} onNewTrade={openNewTrade} />}
+        {tab === "stats" && <StatsView stats={stats} trades={trades} backupMeta={backupMeta} />}
         {tab === "calendar" && (
-          <CalendarView trades={trades} onView={setViewTrade} onEdit={openEditTrade} onNewTrade={openNewTrade} />
+          <CalendarView trades={trades} onView={setViewTrade} onEdit={openEditTrade} />
         )}
         {tab === "trades" && (
           <TradesView
@@ -350,7 +350,6 @@ function App() {
             onEdit={openEditTrade}
             onDelete={handleDelete}
             onCopy={copyTrade}
-            onNewTrade={openNewTrade}
           />
         )}
         {tab === "editor" && (
@@ -401,12 +400,10 @@ function CalendarView({
   trades,
   onView,
   onEdit,
-  onNewTrade,
 }: {
   trades: Trade[];
   onView: (trade: Trade) => void;
   onEdit: (trade: Trade) => void;
-  onNewTrade: () => void;
 }) {
   const todayKey = toLocalInputValue().slice(0, 10);
   const [month, setMonth] = useState(currentMonthValue());
@@ -437,9 +434,6 @@ function CalendarView({
           <h2>{formatMonthTitle(month)} 操作看板</h2>
           <p>按天观察交易密度、当天总 R、实际盈亏、系统外交易和情绪高分交易。</p>
         </div>
-        <button className="primary-action" type="button" onClick={onNewTrade}>
-          新增交易
-        </button>
       </section>
 
       <section className="metric-grid calendar-month-metrics">
@@ -593,12 +587,10 @@ function StatsView({
   stats,
   trades,
   backupMeta,
-  onNewTrade,
 }: {
   stats: JournalStats;
   trades: Trade[];
   backupMeta: BackupMeta;
-  onNewTrade: () => void;
 }) {
   const backupDays = daysBetween(backupMeta.lastBackupAt);
   const tradesSinceBackup = trades.length - (backupMeta.tradeCountAtLastBackup ?? 0);
@@ -612,9 +604,6 @@ function StatsView({
           <h2>用 R 和执行质量判断系统是否有效</h2>
           <p>数据只保存在当前浏览器 IndexedDB，不上传到服务器。</p>
         </div>
-        <button className="primary-action" type="button" onClick={onNewTrade}>
-          新增交易
-        </button>
       </section>
 
       <section className="metric-grid">
@@ -749,14 +738,12 @@ function TradesView({
   onEdit,
   onDelete,
   onCopy,
-  onNewTrade,
 }: {
   trades: Trade[];
   onView: (trade: Trade) => void;
   onEdit: (trade: Trade) => void;
   onDelete: (trade: Trade) => void;
   onCopy: (trade: Trade) => void;
-  onNewTrade: () => void;
 }) {
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const strategies = useMemo(
@@ -775,9 +762,6 @@ function TradesView({
       <section className="panel">
         <div className="list-head">
           <SectionTitle eyebrow="Orders" title="交易列表" />
-          <button className="primary-action" type="button" onClick={onNewTrade}>
-            新增
-          </button>
         </div>
 
         <div className="filter-grid">
