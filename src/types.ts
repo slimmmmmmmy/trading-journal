@@ -76,4 +76,4 @@ export interface BackupMeta {
   tradeCountAtLastBackup?: number;
 }
 
-export type TabKey = "stats" | "trades" | "editor" | "backup";
+export type TabKey = "stats" | "calendar" | "trades" | "editor" | "backup";

@@ -29,6 +29,33 @@ type Filters = {
   keyword: string;
 };
 
+type CalendarDaySummary = {
+  date: string;
+  dayNumber: number;
+  inMonth: boolean;
+  trades: Trade[];
+  count: number;
+  totalR: number;
+  pnlTotal: number;
+  hasPnl: boolean;
+  winCount: number;
+  lossCount: number;
+  outSystemCount: number;
+  highEmotionCount: number;
+};
+
+type TradeSetSummary = {
+  count: number;
+  totalR: number;
+  avgR: number;
+  winRate: number;
+  pnlTotal: number;
+  hasPnl: boolean;
+  tradingDays: number;
+  outSystemCount: number;
+  highEmotionCount: number;
+};
+
 const emptyFilters: Filters = {
   symbol: "",
   direction: "",
@@ -43,6 +70,40 @@ const emptyFilters: Filters = {
   dateTo: "",
   keyword: "",
 };
+
+const weekdayLabels = ["一", "二", "三", "四", "五", "六", "日"];
+
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+function roundNumber(value: number): number {
+  return Number.isFinite(value) ? Number(value.toFixed(2)) : 0;
+}
+
+function dateKeyFromDate(date: Date): string {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+function currentMonthValue(): string {
+  const date = new Date();
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}`;
+}
+
+function shiftMonth(monthValue: string, offset: number): string {
+  const [year, month] = monthValue.split("-").map(Number);
+  return dateKeyFromDate(new Date(year, month - 1 + offset, 1)).slice(0, 7);
+}
+
+function formatMonthTitle(monthValue: string): string {
+  const [year, month] = monthValue.split("-").map(Number);
+  return `${year}年${month}月`;
+}
+
+function formatAmount(value: number): string {
+  const rounded = roundNumber(value);
+  return `${rounded > 0 ? "+" : ""}${rounded.toFixed(2)}`;
+}
 
 function toLocalInputValue(date = new Date()): string {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
@@ -95,6 +156,65 @@ function daysBetween(from?: string): number | null {
   if (!from) return null;
   const diff = Date.now() - new Date(from).getTime();
   return Math.max(0, Math.floor(diff / 86400000));
+}
+
+function summarizeTradeSet(rows: Trade[]): TradeSetSummary {
+  const totalR = roundNumber(rows.reduce((sum, trade) => sum + trade.rMultiple, 0));
+  const pnlValues = rows.map((trade) => trade.pnl).filter((value): value is number => typeof value === "number");
+
+  return {
+    count: rows.length,
+    totalR,
+    avgR: rows.length ? roundNumber(totalR / rows.length) : 0,
+    winRate: rows.length ? rows.filter((trade) => trade.rMultiple > 0).length / rows.length : 0,
+    pnlTotal: roundNumber(pnlValues.reduce((sum, value) => sum + value, 0)),
+    hasPnl: pnlValues.length > 0,
+    tradingDays: new Set(rows.map((trade) => trade.date.slice(0, 10))).size,
+    outSystemCount: rows.filter((trade) => !trade.inSystem).length,
+    highEmotionCount: rows.filter((trade) => trade.emotionScore >= 4).length,
+  };
+}
+
+function summarizeCalendarDay(date: Date, inMonth: boolean, rows: Trade[]): CalendarDaySummary {
+  const summary = summarizeTradeSet(rows);
+  return {
+    date: dateKeyFromDate(date),
+    dayNumber: date.getDate(),
+    inMonth,
+    trades: rows,
+    count: summary.count,
+    totalR: summary.totalR,
+    pnlTotal: summary.pnlTotal,
+    hasPnl: summary.hasPnl,
+    winCount: rows.filter((trade) => trade.rMultiple > 0).length,
+    lossCount: rows.filter((trade) => trade.rMultiple < 0).length,
+    outSystemCount: summary.outSystemCount,
+    highEmotionCount: summary.highEmotionCount,
+  };
+}
+
+function buildCalendarDays(monthValue: string, trades: Trade[]): CalendarDaySummary[] {
+  const [year, month] = monthValue.split("-").map(Number);
+  const grouped = new Map<string, Trade[]>();
+
+  for (const trade of trades) {
+    const date = trade.date.slice(0, 10);
+    const list = grouped.get(date) ?? [];
+    list.push(trade);
+    grouped.set(date, list);
+  }
+
+  const firstDay = new Date(year, month - 1, 1);
+  const mondayOffset = (firstDay.getDay() + 6) % 7;
+  const gridStart = new Date(year, month - 1, 1 - mondayOffset);
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(gridStart);
+    date.setDate(gridStart.getDate() + index);
+    const dateKey = dateKeyFromDate(date);
+    const rows = [...(grouped.get(dateKey) ?? [])].sort((a, b) => a.date.localeCompare(b.date));
+    return summarizeCalendarDay(date, date.getMonth() === month - 1, rows);
+  });
 }
 
 function App() {
@@ -212,6 +332,9 @@ function App() {
 
       <main>
         {tab === "stats" && <StatsView stats={stats} trades={trades} backupMeta={backupMeta} onNewTrade={openNewTrade} />}
+        {tab === "calendar" && (
+          <CalendarView trades={trades} onView={setViewTrade} onEdit={openEditTrade} onNewTrade={openNewTrade} />
+        )}
         {tab === "trades" && (
           <TradesView
             trades={trades}
@@ -238,6 +361,7 @@ function App() {
 
       <nav className="tabbar" aria-label="主导航">
         <TabButton active={tab === "stats"} label="统计" onClick={() => setTab("stats")} />
+        <TabButton active={tab === "calendar"} label="日历" onClick={() => setTab("calendar")} />
         <TabButton active={tab === "trades"} label="订单" onClick={() => setTab("trades")} />
         <TabButton active={tab === "editor"} label="记录" onClick={openNewTrade} />
         <TabButton active={tab === "backup"} label="备份" onClick={() => setTab("backup")} />
@@ -261,6 +385,198 @@ function TabButton({ active, label, onClick }: { active: boolean; label: string;
     <button className={active ? "tabbar__item is-active" : "tabbar__item"} type="button" onClick={onClick}>
       <span>{label}</span>
     </button>
+  );
+}
+
+function CalendarView({
+  trades,
+  onView,
+  onEdit,
+  onNewTrade,
+}: {
+  trades: Trade[];
+  onView: (trade: Trade) => void;
+  onEdit: (trade: Trade) => void;
+  onNewTrade: () => void;
+}) {
+  const todayKey = toLocalInputValue().slice(0, 10);
+  const [month, setMonth] = useState(currentMonthValue());
+  const [selectedDate, setSelectedDate] = useState(todayKey);
+  const calendarDays = useMemo(() => buildCalendarDays(month, trades), [month, trades]);
+  const monthTrades = useMemo(() => trades.filter((trade) => trade.date.startsWith(month)), [month, trades]);
+  const monthSummary = useMemo(() => summarizeTradeSet(monthTrades), [monthTrades]);
+  const tradedDays = calendarDays.filter((day) => day.inMonth && day.count > 0);
+  const bestDay = tradedDays.length ? [...tradedDays].sort((a, b) => b.totalR - a.totalR)[0] : null;
+  const worstDay = tradedDays.length ? [...tradedDays].sort((a, b) => a.totalR - b.totalR)[0] : null;
+  const selectedTrades = useMemo(
+    () => trades.filter((trade) => trade.date.slice(0, 10) === selectedDate).sort((a, b) => a.date.localeCompare(b.date)),
+    [selectedDate, trades],
+  );
+  const selectedSummary = useMemo(() => summarizeTradeSet(selectedTrades), [selectedTrades]);
+
+  useEffect(() => {
+    if (selectedDate.startsWith(month)) return;
+    const firstTradingDay = trades.find((trade) => trade.date.startsWith(month))?.date.slice(0, 10);
+    setSelectedDate(firstTradingDay ?? `${month}-01`);
+  }, [month, selectedDate, trades]);
+
+  return (
+    <div className="screen-stack">
+      <section className="hero-card calendar-hero">
+        <div>
+          <p className="eyebrow">Calendar</p>
+          <h2>{formatMonthTitle(month)} 操作看板</h2>
+          <p>按天观察交易密度、当天总 R、实际盈亏、系统外交易和情绪高分交易。</p>
+        </div>
+        <button className="primary-action" type="button" onClick={onNewTrade}>
+          新增交易
+        </button>
+      </section>
+
+      <section className="metric-grid calendar-month-metrics">
+        <Metric label="本月交易" value={`${monthSummary.count} 笔`} />
+        <Metric label="本月总 R" value={formatR(monthSummary.totalR)} tone={valueTone(monthSummary.totalR)} />
+        <Metric label="交易天数" value={`${monthSummary.tradingDays} 天`} />
+        <Metric label="胜率" value={formatPercent(monthSummary.winRate)} />
+        <Metric label="平均 R" value={formatR(monthSummary.avgR)} tone={valueTone(monthSummary.avgR)} />
+        <Metric label="实际盈亏" value={monthSummary.hasPnl ? formatAmount(monthSummary.pnlTotal) : "未填写"} tone={valueTone(monthSummary.pnlTotal)} />
+        <Metric label="系统外" value={`${monthSummary.outSystemCount} 笔`} tone={monthSummary.outSystemCount ? "negative" : "neutral"} />
+        <Metric label="情绪 ≥ 4" value={`${monthSummary.highEmotionCount} 笔`} tone={monthSummary.highEmotionCount ? "negative" : "neutral"} />
+      </section>
+
+      <section className="panel calendar-panel">
+        <div className="calendar-toolbar">
+          <SectionTitle eyebrow="Month" title="月度日历" />
+          <div className="month-controls">
+            <button className="ghost-action" type="button" onClick={() => setMonth((value) => shiftMonth(value, -1))}>
+              上月
+            </button>
+            <input
+              className="month-input"
+              type="month"
+              value={month}
+              onChange={(event) => {
+                if (event.target.value) setMonth(event.target.value);
+              }}
+            />
+            <button className="ghost-action" type="button" onClick={() => setMonth((value) => shiftMonth(value, 1))}>
+              下月
+            </button>
+            <button
+              className="ghost-action"
+              type="button"
+              onClick={() => {
+                setMonth(currentMonthValue());
+                setSelectedDate(todayKey);
+              }}
+            >
+              本月
+            </button>
+          </div>
+        </div>
+
+        <div className="calendar-insights">
+          <div>
+            <span>最佳交易日</span>
+            <strong className={bestDay ? valueTone(bestDay.totalR) : "neutral"}>
+              {bestDay ? `${bestDay.date.slice(5)} ${formatR(bestDay.totalR)}` : "暂无"}
+            </strong>
+          </div>
+          <div>
+            <span>最大亏损日</span>
+            <strong className={worstDay ? valueTone(worstDay.totalR) : "neutral"}>
+              {worstDay ? `${worstDay.date.slice(5)} ${formatR(worstDay.totalR)}` : "暂无"}
+            </strong>
+          </div>
+          <div>
+            <span>重点观察</span>
+            <strong>{monthSummary.outSystemCount + monthSummary.highEmotionCount} 个风险信号</strong>
+          </div>
+        </div>
+
+        <div className="calendar-weekdays">
+          {weekdayLabels.map((label) => (
+            <span key={label}>{label}</span>
+          ))}
+        </div>
+
+        <div className="calendar-grid">
+          {calendarDays.map((day) => {
+            const dayClass = [
+              "calendar-day",
+              day.inMonth ? "" : "is-outside",
+              day.count ? "has-trades" : "",
+              day.date === selectedDate ? "is-selected" : "",
+              day.totalR > 0 ? "is-positive" : "",
+              day.totalR < 0 ? "is-negative" : "",
+              day.date === todayKey ? "is-today" : "",
+            ]
+              .filter(Boolean)
+              .join(" ");
+
+            return (
+              <button className={dayClass} key={day.date} type="button" onClick={() => setSelectedDate(day.date)}>
+                <span className="calendar-day__number">{day.dayNumber}</span>
+                {day.count > 0 ? (
+                  <>
+                    <strong className={valueTone(day.totalR)}>{formatR(day.totalR)}</strong>
+                    <span>{day.count} 笔 · 胜 {day.winCount} 亏 {day.lossCount}</span>
+                    {day.hasPnl && <span className={valueTone(day.pnlTotal)}>盈亏 {formatAmount(day.pnlTotal)}</span>}
+                    {(day.outSystemCount > 0 || day.highEmotionCount > 0) && (
+                      <div className="calendar-day__flags">
+                        {day.outSystemCount > 0 && <i>外 {day.outSystemCount}</i>}
+                        {day.highEmotionCount > 0 && <i>情绪 {day.highEmotionCount}</i>}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <span className="calendar-day__empty">无交易</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="list-head">
+          <SectionTitle eyebrow="Day" title={`${selectedDate} 交易明细`} />
+          <div className="day-summary-pill">
+            <span>{selectedSummary.count} 笔</span>
+            <strong className={valueTone(selectedSummary.totalR)}>{formatR(selectedSummary.totalR)}</strong>
+          </div>
+        </div>
+
+        {selectedTrades.length === 0 ? (
+          <EmptyState text="这一天没有交易记录" />
+        ) : (
+          <div className="trade-list calendar-trade-list">
+            {selectedTrades.map((trade) => (
+              <article className="trade-card" key={trade.id}>
+                <div className="trade-card__top">
+                  <div>
+                    <strong>{trade.symbol} {trade.direction}</strong>
+                    <span>{trade.date.replace("T", " ")} · {trade.session}</span>
+                  </div>
+                  <b className={valueTone(trade.rMultiple)}>{formatR(trade.rMultiple)}</b>
+                </div>
+                <div className="tag-row">
+                  <span>{trade.strategy || "未填策略"}</span>
+                  <span>{trade.inSystem ? "系统内" : "系统外"}</span>
+                  <span>{trade.result}</span>
+                  <span>情绪 {trade.emotionScore}</span>
+                </div>
+                <p>{trade.summary || "暂无一句话复盘"}</p>
+                <div className="card-actions card-actions--compact">
+                  <button type="button" onClick={() => onView(trade)}>详情</button>
+                  <button type="button" onClick={() => onEdit(trade)}>编辑</button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
   );
 }
 
